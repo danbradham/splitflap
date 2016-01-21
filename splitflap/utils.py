@@ -1,5 +1,6 @@
 from __future__ import print_function, division
 import pymel.core as pm
+import re
 import math
 from pymel.core.runtime import nClothCreate, nClothMakeCollide
 from contextlib import contextmanager
@@ -39,8 +40,16 @@ def undo_chunk(auto_undo=False, exc_callback=None):
         raise
     else:
         pm.undoInfo(closeChunk=True)
-        if auto_undo:
-            pm.undo()
+
+
+def replace_in_hierarchy(root, regex, substitute):
+
+    hierarchy = pm.ls(root, dag=True)
+    for node in hierarchy:
+        old_name = str(node)
+        new_name = re.sub(regex, substitute, old_name)
+        if old_name != new_name:
+            node.rename(new_name)
 
 
 def set_uvs(mesh, uvs, uvSet=None):
@@ -287,16 +296,25 @@ def create_collider(flaps, radius):
     '''
 
     tx = flaps.boundingBox().width() * 0.5
-    ty = flaps.boundingBox().height() * 0.5 - radius
-    tz = radius * 0.9
-    cubea, cubea_shape = pm.polyCube(width=0.2, height=0.1, depth=0.01)
-    cubeb, cubeb_shape = pm.polyCube(width=0.2, height=0.1, depth=0.01)
-    cubec, cubec_shape = pm.polyCube(width=0.2, height=0.1, depth=0.01)
-    cubed, cubed_shape = pm.polyCube(width=0.2, height=0.1, depth=0.01)
+    ty = flaps.boundingBox().height() * 0.505 - radius
+    tz = radius * 1.08
+    tz2 = radius * 1.15
+    cubea, cubea_shape = pm.polyCube(width=0.2, height=0.05, depth=0.05)
+    cubeb, cubeb_shape = pm.polyCube(width=0.2, height=0.05, depth=0.05)
+    cubec, cubec_shape = pm.polyCube(width=0.2, height=0.05, depth=0.05)
+    cubed, cubed_shape = pm.polyCube(width=0.2, height=0.05, depth=0.05)
     cubea.setTranslation([tx, ty, tz])
     cubeb.setTranslation([-tx, ty, tz])
-    cubec.setTranslation([tx, -ty, -tz])
-    cubed.setTranslation([-tx, -ty, -tz])
+    cubec.setTranslation([tx, -ty, -tz2])
+    cubed.setTranslation([-tx, -ty, -tz2])
+    merge_verts(cubea, 7, 5)
+    merge_verts(cubea, 6, 4)
+    merge_verts(cubeb, 7, 5)
+    merge_verts(cubeb, 6, 4)
+    merge_verts(cubec, 3, 1)
+    merge_verts(cubec, 2, 0)
+    merge_verts(cubed, 3, 1)
+    merge_verts(cubed, 2, 0)
     collider = pm.polyUnite(
         [cubea, cubeb, cubec, cubed],
         ch=False,
@@ -304,6 +322,13 @@ def create_collider(flaps, radius):
         name=flaps.replace('geo', 'collider_geo')
     )[0]
     return collider
+
+
+def merge_verts(mesh, a, b):
+    a = mesh.vtx[a]
+    b = mesh.vtx[b]
+    a.setPosition(b.getPosition(space='world'), space='world')
+    pm.polyMergeVertex([a, b], d=0.0000001)
 
 
 def make_nCloth(*args, **kwargs):
@@ -315,12 +340,16 @@ def make_nCloth(*args, **kwargs):
     '''
 
     nodes = args
+    kwargs.setdefault('stretchResistance', 20)
+    kwargs.setdefault('compressionResistance', 10)
+    kwargs.setdefault('bendResistance', 0.6)
     kwargs.setdefault('inputMeshAttract', 1)
     kwargs.setdefault('inputAttractMethod', 1)
     kwargs.setdefault('inputAttractDamp', 0)
+    kwargs.setdefault('selfCollisionFlag', 4)
     kwargs.setdefault('thickness', 0.005)
-    kwargs.setdefault('pointMass', 10)
-    kwargs.setdefault('drag', 0.5)
+    kwargs.setdefault('pointMass', 100)
+    kwargs.setdefault('drag', 0.15)
 
     # Input attract weight ramp
     ramp = pm.createNode('ramp')
@@ -350,6 +379,8 @@ def make_nCollider(*args, **kwargs):
     '''
 
     nodes = args
+    kwargs.setdefault('collisionFlag', 3)
+    kwargs.setdefault('collideStrength', 0.1)
     kwargs.setdefault('thickness', 0.005)
 
     with selection(nodes):

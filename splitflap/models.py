@@ -1,5 +1,4 @@
 from __future__ import division, print_function
-import re
 import pymel.core as pm
 from . import utils
 reload(utils)
@@ -21,7 +20,7 @@ class SplitFlapWall(object):
         return self._split_flaps
 
     @classmethod
-    def create(cls, split_flap, rows, columns, padding=0.2):
+    def create(cls, split_flap, padding=0.2):
         '''
         :param split_flap: SplitFlap object
         :param rows: Number of rows in layout
@@ -29,6 +28,8 @@ class SplitFlapWall(object):
         :param padding: Padding in cm between SplitFlaps
         '''
 
+        rows = split_flap.number_of_rows.get()
+        columns = split_flap.number_of_columns.get()
         bounds = split_flap.flaps.boundingBox()
         x_step = bounds.width() + padding
         y_step = bounds.height() + padding
@@ -60,13 +61,8 @@ class SplitFlapWall(object):
                 utils.shift_uvs(mesh_uvs, uvids, c * u_step, r * -v_step)
                 utils.set_uvs(flaps, mesh_uvs)
 
-                # Rename hierarchy
-                hierarchy = pm.ls(new_flap, dag=True)
-                for node in hierarchy:
-                    old_name = str(node)
-                    new_name = re.sub(r'\d+', index_name, old_name)
-                    if old_name != new_name:
-                        node.rename(new_name)
+                # Rename Hierarchy
+                utils.replace_in_hierarchy(new_flap, 'BASE', index_name)
 
                 split_flaps.append(new_split_flap)
                 i += 1
@@ -169,8 +165,6 @@ class SplitFlap(object):
                             for i in xrange(num_images - 1)])
         utils.radial_arrangement(flaps, radius)
         utils.radial_arrangement(cloth_flaps, radius)
-        print(len(flaps))
-        print(len(radius))
 
         r, c = utils.get_row_col(layout_index, None, columns)
         rowcol = '{:02d}{:02d}'.format(int(r), int(c))
@@ -202,12 +196,17 @@ class SplitFlap(object):
         split_flap.addAttr('layout_index', at='long', dv=layout_index)
         split_flap.addAttr('layout_row', at='long', dv=r)
         split_flap.addAttr('layout_column', at='long', dv=c)
+        split_flap.addAttr('number_of_rows', at='long', dv=rows)
+        split_flap.addAttr('number_of_columns', at='long', dv=columns)
         split_flap.addAttr('flaps', at='message')
         split_flap.addAttr('cloth', at='message')
         split_flap.addAttr('collider', at='message')
         flaps.message.connect(split_flap.flaps)
         cloth.message.connect(split_flap.cloth)
         collider.message.connect(split_flap.collider)
+
+        # Rename hierarchy
+        utils.replace_in_hierarchy(split_flap, r'\d+', 'BASE')
 
         return cls(split_flap)
 
@@ -224,3 +223,10 @@ class SplitFlap(object):
         pm.group(ncloth_transforms + ncol_transforms + [base],
                  name='dynamics_grp',
                  parent=self.pynode)
+
+    def rem_dynamic(self):
+        if not self.is_dynamic:
+            print('Not dynamic')
+            return
+
+        pass
