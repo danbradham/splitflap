@@ -9,111 +9,12 @@ class SplitFlapWall(object):
     def __init__(self, pynode):
         self.pynode = pynode
         self._split_flaps = None
-
-    @property
-    def split_flaps(self):
-        if not self._split_flaps:
-            self._split_flaps = []
-            for node in pm.ls(self.pynode, dag=True):
-                if node.hasAttr('split_flap'):
-                    self._split_flaps.append(SplitFlap(node))
-        return self._split_flaps
-
-    @classmethod
-    def create(cls, split_flap, padding=0.2):
-        '''
-        :param split_flap: SplitFlap object
-        :param rows: Number of rows in layout
-        :param columns: Number of columns in layout
-        :param padding: Padding in cm between SplitFlaps
-        '''
-
-        rows = split_flap.number_of_rows.get()
-        columns = split_flap.number_of_columns.get()
-        bounds = split_flap.flaps.boundingBox()
-        x_step = bounds.width() + padding
-        y_step = bounds.height() + padding
-        u_step = 1 / columns
-        v_step = 1 / rows
-        uvs = utils.get_uvs(split_flap.flaps)
-        uvids = utils.get_uvs_in_range(uvs, 0, 0, 9999, 9999)
-
-        split_flaps = []
-        i = 0
-        for r in xrange(rows):
-            for c in xrange(columns):
-                index_name = '{:02d}{:02d}'.format(r, c)
-                new_flap = split_flap.pynode.duplicate(
-                    name='flaps_{}_grp'.format(index_name),
-                    un=True,
-                    rc=False)[0]
-
-                # Translate group
-                new_flap.setTranslation([c * x_step, r * -y_step, 0])
-                new_flap.layout_index.set(i)
-                new_flap.layout_row.set(r)
-                new_flap.layout_column.set(c)
-
-                # Shift uvs
-                new_split_flap = SplitFlap(new_flap)
-                flaps = new_split_flap.flaps
-                mesh_uvs = list(uvs)
-                utils.shift_uvs(mesh_uvs, uvids, c * u_step, r * -v_step)
-                utils.set_uvs(flaps, mesh_uvs)
-
-                # Rename Hierarchy
-                utils.replace_in_hierarchy(new_flap, 'BASE', index_name)
-
-                split_flaps.append(new_split_flap)
-                i += 1
-
-        grp = pm.group([f.pynode for f in split_flaps], name='split_flap_wall')
-        return cls(grp)
-
-    def make_dynamic(self):
-        needs_ncloth = []
-        colliders = []
-
-        for split_flap in self.split_flaps:
-            if not split_flap.is_dynamic:
-                needs_ncloth.append(split_flap.cloth)
-                colliders.append(split_flap.collider)
-
-        if needs_ncloth:
-            ncloth_shapes, ncloth_transforms = utils.make_nCloth(needs_ncloth)
-            ncol_shapes, ncol_transforms = utils.make_nCollider(colliders)
-
-        wrap_nodes = []
-        for split_flap in self.split_flaps:
-            _, base = utils.create_wrap_deformer(
-                influence=split_flap.cloth,
-                deformed=split_flap.flaps)
-            wrap_nodes.append(base)
-
-        pm.group(ncloth_transforms + ncol_transforms,
-                 name='dynamics_grp',
-                 parent=self.pynode)
-
-
-class SplitFlap(object):
-
-    def __init__(self, pynode):
-        self.pynode = pynode
+        self._world_grp = None
         self._flaps = None
         self._cloth = None
         self._collider = None
-
-    @property
-    def layout_index(self):
-        return self.pynode.layout_index
-
-    @property
-    def layout_row(self):
-        return self.pynode.layout_row
-
-    @property
-    def layout_column(self):
-        return self.pynode.layout_column
+        self._anim_grp = None
+        self._dyn_grp = None
 
     @property
     def flaps(self):
@@ -132,6 +33,242 @@ class SplitFlap(object):
         if not self._collider:
             self._collider = self.pynode.collider.inputs()[0]
         return self._collider
+
+    @property
+    def dyn_grp(self):
+        if not self._dyn_grp:
+            self._dyn_grp = self.pynode.dyn_grp.inputs()[0]
+        return self._dyn_grp
+
+    @property
+    def is_dynamic(self):
+        return bool(self.cloth.history(type='nCloth'))
+
+    @property
+    def ncloth_shape(self):
+        cloth_shape = self.cloth.getShape(noIntermediate=True)
+        return cloth_shape.inMesh.inputs(type='nCloth')[0]
+
+    @classmethod
+    def create(cls, split_flap, padding=(0.2, 0)):
+        '''
+        :param split_flap: SplitFlap object
+        :param rows: Number of rows in layout
+        :param columns: Number of columns in layout
+        :param padding: Padding in cm between SplitFlaps
+        '''
+
+        rows = split_flap.number_of_rows.get()
+        columns = split_flap.number_of_columns.get()
+        bounds = split_flap.flaps.boundingBox()
+        x_step = bounds.width() + padding[0]
+        y_step = bounds.height() + padding[1]
+        x_offset = x_step * (columns - 1) * 0.5
+        y_offset = y_step * (rows - 1)
+        u_step = 1 / columns
+        v_step = 1 / rows
+        uvs = utils.get_uvs(split_flap.flaps)
+        uvids = utils.get_uvs_in_range(uvs, 0, 0, 9999, 9999)
+
+        world_grp = pm.group(name='world_grp', em=True)
+        anim_grp = pm.group(name='anim_grp', em=True)
+
+        # Create soup copiers
+        arrays = []
+        xforms = []
+
+        rotators = list(split_flap.rotators)
+        rot_copier = utils.create_copier(
+            [rotators.pop()],
+            name=str(rotators) + '_cp')
+        rot_xform, rot_copier, rot_array = rot_copier
+        arrays.append(rot_array)
+        xforms.append(rot_xform)
+
+        while rotators:
+            r = rotators.pop()
+            copier = utils.create_copier(
+                [r],
+                name=str(r) + '_cp',
+                in_array=rot_array
+            )
+            xforms.append(copier[0])
+
+        copies = list(split_flap.copies)
+        while copies:
+            copy = copies.pop()
+            static_copier = utils.create_copier(
+                [copy],
+                name=str(copy) + '_cp',
+                in_array=rot_array,
+                rotate=False
+            )
+            xforms.append(static_copier[0])
+
+        cloth_copier = utils.create_copier(
+            [split_flap.cloth],
+            name='ncloth_cp',
+            in_array=rot_array
+        )
+        cloth_xform, cloth_copier, cloth_array = cloth_copier
+        cloth_xform.hide()
+
+        cldr_copier = utils.create_copier(
+            [split_flap.collider],
+            'nrigid_cp',
+            rotate=False,
+            in_array=rot_array)
+        cldr_xform, cldr_copier, cldr_array = cldr_copier
+        cldr_xform.hide()
+
+        dyn_grp = pm.group([cldr_xform, cloth_xform], name='dynamics_grp')
+
+        split_flaps = []
+        i = 0
+        for r in xrange(rows):
+            for c in xrange(columns):
+                index_name = '{:02d}{:02d}'.format(r, c)
+                name = str(split_flap.flaps).replace('BASE', index_name)
+                new_flap = split_flap.flaps.duplicate(
+                    name=name,
+                    un=True,
+                    rc=False)[0]
+                translate = (c * x_step - x_offset, r * -y_step + y_offset, 0)
+
+                # Translate flaps
+                new_flap.setTranslation(translate)
+
+                # Create animation hierarchy
+                loc = pm.spaceLocator(name='world_{}_xform'.format(index_name))
+                loc.hide()
+                loc.setTranslation(translate)
+
+                jnt_name = 'anim_{}_xform'.format(index_name)
+                anim_jnt = utils.create_joint(jnt_name)
+                anim_jnt.setTranslation(translate)
+                anim_jnt.rotateX.setKey(v=0, t=1)
+                anim_jnt.rotateX.setKey(v=90, t=24)
+                parent = anim_jnt
+                for i in range(6):
+                    rot_name = 'rot_{}_{:02d}'.format(index_name, i)
+                    rot_grp = pm.group(em=True, name=rot_name)
+                    pm.parent(rot_grp, parent, relative=True)
+                    parent = rot_grp
+
+                pm.parent(anim_jnt, anim_grp)
+                pm.parent(loc, world_grp)
+                pm.parentConstraint(parent, loc)
+
+                # Shift uvs
+                mesh_uvs = list(uvs)
+                utils.shift_uvs(mesh_uvs, uvids, c * u_step, r * -v_step)
+                utils.set_uvs(new_flap, mesh_uvs)
+
+                split_flaps.append(new_flap)
+                i += 1
+
+        # Connect xforms to transform array
+        for i, l in enumerate(world_grp.getChildren()):
+            l.rotateOrder.connect(rot_array.inTransforms[i].inRotateOrder)
+            l.worldMatrix[0].connect(rot_array.inTransforms[i].inMatrix)
+
+        flaps_geo = pm.polyUnite(
+            split_flaps,
+            ch=False,
+            mergeUVSets=True,
+            name='flaps_geo'
+        )[0]
+
+        split_flap.pynode.hide()
+        grp = pm.group(
+            [flaps_geo, xforms, world_grp, anim_grp, dyn_grp],
+            name='wall_grp')
+        grp.addAttr('world_grp', at='message')
+        grp.addAttr('flaps', at='message')
+        grp.addAttr('cloth', at='message')
+        grp.addAttr('collider', at='message')
+        grp.addAttr('anim_grp', at='message')
+        grp.addAttr('dyn_grp', at='message')
+        world_grp.message.connect(grp.world_grp)
+        flaps_geo.message.connect(grp.flaps)
+        anim_grp.message.connect(grp.anim_grp)
+        cloth_xform.message.connect(grp.cloth)
+        cldr_xform.message.connect(grp.collider)
+        dyn_grp.message.connect(grp.dyn_grp)
+        return cls(grp)
+
+    def make_dynamic(self):
+        if self.is_dynamic:
+            return
+
+        ncloth_shapes, ncloth_transforms = utils.make_nCloth(self.cloth)
+        ncol_shapes, ncol_transforms = utils.make_nCollider(self.collider)
+        wrap, base = utils.create_wrap_deformer(self.cloth, self.flaps)
+
+        pm.parent(ncloth_transforms, self.dyn_grp)
+        pm.parent(ncol_transforms, self.dyn_grp)
+        pm.parent(base, self.dyn_grp)
+
+
+class SplitFlap(object):
+
+    def __init__(self, pynode):
+        self.pynode = pynode
+        self._flaps = None
+        self._cloth = None
+        self._collider = None
+        self._rotators = None
+
+    @property
+    def layout_index(self):
+        return self.pynode.layout_index
+
+    @property
+    def layout_row(self):
+        return self.pynode.layout_row
+
+    @property
+    def layout_column(self):
+        return self.pynode.layout_column
+
+    @property
+    def number_of_rows(self):
+        return self.pynode.number_of_rows
+
+    @property
+    def number_of_columns(self):
+        return self.pynode.number_of_columns
+
+    @property
+    def flaps(self):
+        if not self._flaps:
+            self._flaps = self.pynode.flaps.inputs()[0]
+        return self._flaps
+
+    @property
+    def cloth(self):
+        if not self._cloth:
+            self._cloth = self.pynode.cloth.inputs()[0]
+        return self._cloth
+
+    @property
+    def collider(self):
+        if not self._collider:
+            self._collider = self.pynode.collider.inputs()[0]
+        return self._collider
+
+    @property
+    def rotators(self):
+        rotate_grp = self.pynode.rotate_grp.inputs()[0]
+        for t in rotate_grp.getChildren():
+            if t != self.cloth:
+                yield t
+
+    @property
+    def copies(self):
+        copy_grp = self.pynode.copy_grp.inputs()[0]
+        for t in copy_grp.getChildren():
+            yield t
 
     @property
     def is_dynamic(self):
@@ -191,7 +328,11 @@ class SplitFlap(object):
         flaps_grp = pm.group([flaps, collider],
                              name='flaps_{}_geo_grp'.format(rowcol))
         rotate_grp = pm.group(cloth, name='rotate_{}_grp'.format(rowcol))
-        split_flap = pm.group([rotate_grp, flaps_grp], name=flaps_name + '_grp')
+        copy_grp = pm.group(em=True, name='copy_{}_grp'.format(rowcol))
+        split_flap = pm.group(
+            [copy_grp, rotate_grp, flaps_grp],
+            name=flaps_name + '_grp'
+        )
         split_flap.addAttr('split_flap', at='bool', dv=True)
         split_flap.addAttr('layout_index', at='long', dv=layout_index)
         split_flap.addAttr('layout_row', at='long', dv=r)
@@ -201,6 +342,10 @@ class SplitFlap(object):
         split_flap.addAttr('flaps', at='message')
         split_flap.addAttr('cloth', at='message')
         split_flap.addAttr('collider', at='message')
+        split_flap.addAttr('rotate_grp', at='message')
+        split_flap.addAttr('copy_grp', at='message')
+        copy_grp.message.connect(split_flap.copy_grp)
+        rotate_grp.message.connect(split_flap.rotate_grp)
         flaps.message.connect(split_flap.flaps)
         cloth.message.connect(split_flap.cloth)
         collider.message.connect(split_flap.collider)

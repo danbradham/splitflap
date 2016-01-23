@@ -7,17 +7,17 @@ reload(splitflap)
 import pymel.core as pm
 
 
-sf = splitflap.SplitFlap.create(
+base_flap = splitflap.SplitFlap.create(
     base_flaps=pm.selected(),
-    num_images=24,
-    rows=2,
-    columns=4,
-    radius=0.2,
+    num_images=32,
+    rows=3,
+    columns=10,
+    radius=0.225,
 )
 
 wall = splitflap.SplitFlapWall.create(
-    splitflap.SplitFlap(pm.selected()[0]),
-    rows=7,
-    columns=13,
-    padding=0.1,
+    base_flap,
+    padding=(0.2, -0.1)
 )
+
+wall.make_dynamic()

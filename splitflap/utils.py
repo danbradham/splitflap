@@ -257,7 +257,7 @@ def create_wrap_deformer(influence, deformed, **kwargs):
     kwargs.setdefault('maxDistance', 1.0)
     kwargs.setdefault('exclusiveBind', False)
     kwargs.setdefault('autoWeightThreshold', True)
-    kwargs.setdefault('falloffMode', 0)
+    kwargs.setdefault('falloffMode', 1)
 
     wrap = pm.deformer(type='wrap')[0]
     for k, v in kwargs.iteritems():
@@ -324,6 +324,10 @@ def create_collider(flaps, radius):
     return collider
 
 
+def insert_parent(node):
+    pass
+
+
 def merge_verts(mesh, a, b):
     a = mesh.vtx[a]
     b = mesh.vtx[b]
@@ -380,7 +384,7 @@ def make_nCollider(*args, **kwargs):
 
     nodes = args
     kwargs.setdefault('collisionFlag', 3)
-    kwargs.setdefault('collideStrength', 0.1)
+    kwargs.setdefault('collideStrength', 0.5)
     kwargs.setdefault('thickness', 0.005)
 
     with selection(nodes):
@@ -392,3 +396,39 @@ def make_nCollider(*args, **kwargs):
         collider_transforms = [c.getParent() for c in collider_shapes]
 
     return collider_shapes, collider_transforms
+
+
+def create_copier(in_meshes, name='out_geo#', in_array=None, rotate=True):
+
+    # Create output mesh
+    out_shape = pm.createNode('mesh')
+    out_xform = out_shape.getParent()
+    out_xform.rename(name)
+
+    # Create copier node
+    copier = pm.createNode('copier')
+    copier.orient.set(1)
+    copier.toggleUV.set(1)
+    copier.outputMesh.connect(out_shape.inMesh)
+
+    # Connect input meshes
+    for i, mesh in enumerate(in_meshes):
+        shape = mesh.getShape(noIntermediate=True)
+        shape.worldMesh[0].connect(copier.inputMesh[i])
+
+    if not in_array:
+        # Connect input transforms
+        array = pm.createNode('transformsToArrays')
+    else:
+        array = in_array
+
+    array.outPositionPP.connect(copier.posArray)
+    if rotate:
+        array.outRotationPP.connect(copier.rotArray)
+
+    return out_xform, copier, array
+
+
+def create_joint(name):
+    pm.select(clear=True)
+    return pm.joint(name=name)
