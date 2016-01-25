@@ -60,7 +60,7 @@ class SplitFlapWall(object):
 
         ProgressBar.setup(
             title='Creating Split Flap Wall',
-            text='Duplicating base geometry...',
+            text='Duplicating base split flap...',
             maximum=100,
             parent=utils.get_maya_window()
         )
@@ -84,6 +84,7 @@ class SplitFlapWall(object):
         arrays = []
         xforms = []
 
+        ProgressBar.set(10, 'Copying rotate geo...')
         rotators = list(split_flap.rotators)
         rot_copier = utils.create_copier(
             [rotators.pop()],
@@ -101,6 +102,7 @@ class SplitFlapWall(object):
             )
             xforms.append(copier[0])
 
+        ProgressBar.set(20, 'Copying translate geo...')
         copies = list(split_flap.copies)
         while copies:
             copy = copies.pop()
@@ -112,6 +114,7 @@ class SplitFlapWall(object):
             )
             xforms.append(static_copier[0])
 
+        ProgressBar.set(30, 'Copying cloth geo...')
         cloth_copier = utils.create_copier(
             [split_flap.cloth],
             name='ncloth_cp',
@@ -120,6 +123,7 @@ class SplitFlapWall(object):
         cloth_xform, cloth_copier, cloth_array = cloth_copier
         cloth_xform.hide()
 
+        ProgressBar.set(40, 'Copying collider geo...')
         cldr_copier = utils.create_copier(
             [split_flap.collider],
             'nrigid_cp',
@@ -131,9 +135,14 @@ class SplitFlapWall(object):
         dyn_grp = pm.group([cldr_xform, cloth_xform], name='dynamics_grp')
 
         split_flaps = []
+        step = 30 / rows * columns
         i = 0
         for r in xrange(rows):
             for c in xrange(columns):
+                ProgressBar.set(
+                    40 + i * step,
+                    'Creating Split Flap {}'.format(i + 1)
+                )
                 index_name = '{:02d}{:02d}'.format(r, c)
                 name = str(split_flap.flaps).replace('BASE', index_name)
                 new_flap = split_flap.flaps.duplicate(
@@ -174,11 +183,12 @@ class SplitFlapWall(object):
                 split_flaps.append(new_flap)
                 i += 1
 
-        # Connect xforms to transform array
+        ProgressBar.set(75, 'Connecting xforms to copier arrays...')
         for i, l in enumerate(world_grp.getChildren()):
             l.rotateOrder.connect(rot_array.inTransforms[i].inRotateOrder)
             l.worldMatrix[0].connect(rot_array.inTransforms[i].inMatrix)
 
+        ProgressBar.set(80, 'Combining flap geometry...takes awhile')
         flaps_geo = pm.polyUnite(
             split_flaps,
             ch=False,
@@ -186,6 +196,7 @@ class SplitFlapWall(object):
             name='flaps_geo'
         )[0]
 
+        ProgressBar.set(95, 'Grouping and adding attributes...')
         split_flap.pynode.hide()
         grp = pm.group(
             [flaps_geo, xforms, world_grp, anim_grp, dyn_grp],
@@ -202,6 +213,9 @@ class SplitFlapWall(object):
         cloth_xform.message.connect(grp.cloth)
         cldr_xform.message.connect(grp.collider)
         dyn_grp.message.connect(grp.dyn_grp)
+
+        ProgressBar.set(100, 'Done!')
+        ProgressBar.hide()
         return cls(grp)
 
     def make_dynamic(self):
