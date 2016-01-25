@@ -7,6 +7,7 @@ import pymel.core as pm
 from pymel.core.runtime import nClothCreate, nClothMakeCollide
 from PySide import QtGui, QtCore
 from maya.OpenMayaUI import MQtUtil
+from .ui import ProgressBar
 import shiboken
 import time
 
@@ -215,11 +216,19 @@ def create_flaps(num_flaps, base_flaps, layout_index, rows, columns):
     :param columns: Number of columns in layout
     '''
 
+    ProgressBar.setup(
+        title='Creating Split Flaps',
+        text='Duplicating base geometry...',
+        maximum=100,
+        parent=utils.get_maya_window()
+    )
+
     # Name and group geometry
     r, c = get_row_col(layout_index, None, columns)
     flaps = [choice(base_flaps).duplicate(rc=True)[0]
              for i in xrange(num_flaps)]
 
+    ProgressBar.set(25, 'Packing UVs...')
     # Pack UVS
     uvs = get_uvs(flaps[0].getShape(noIntermediate=True))
     top_uvids = get_uvs_in_range(uvs, 0, 0.5, 1, 1)
@@ -232,7 +241,10 @@ def create_flaps(num_flaps, base_flaps, layout_index, rows, columns):
         columns
     )
 
+    ProgressBar.set(50, 'Shifting UVs')
+    step = 50.0 / len(flaps)
     for i, flap in enumerate(flaps):
+        ProgressBar.set(50 + i * step)
         mesh = flap.getShape(noIntermediate=True)
 
         # Shift UVS according to UDIM
@@ -240,6 +252,8 @@ def create_flaps(num_flaps, base_flaps, layout_index, rows, columns):
         shift_uvs(mesh_uvs, top_uvids, *index_to_udim(i, num_flaps))
         shift_uvs(mesh_uvs, bottom_uvids, *index_to_udim(i + 1, num_flaps))
         set_uvs(mesh, mesh_uvs)
+
+    ProgressBar.set(100, 'Done!!')
 
     return flaps
 
@@ -252,10 +266,18 @@ def radial_arrangement(transforms, radius):
     :param radius: Radius of arrangement
     '''
 
+    ProgressBar.setup(
+        title='Arranging Flaps',
+        text='Arranging Flaps...',
+        maximum=len(transforms),
+        parent=utils.get_maya_window()
+    )
+
     rotate_step = 360 / len(transforms)
     radians = math.pi / 180
 
     for i, t in enumerate(transforms):
+        ProgressBar.set(i + 1)
         rx = rotate_step * i
         theta = rx * radians
         translation = [0, math.cos(theta) * radius, -math.sin(theta) * radius]

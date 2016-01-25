@@ -1,7 +1,7 @@
 from __future__ import division, print_function
 import pymel.core as pm
 from . import utils
-reload(utils)
+from .ui import ProgressBar
 
 
 class SplitFlapWall(object):
@@ -57,6 +57,13 @@ class SplitFlapWall(object):
         :param columns: Number of columns in layout
         :param padding: Padding in cm between SplitFlaps
         '''
+
+        ProgressBar.setup(
+            title='Creating Split Flap Wall',
+            text='Duplicating base geometry...',
+            maximum=100,
+            parent=utils.get_maya_window()
+        )
 
         rows = split_flap.number_of_rows.get()
         columns = split_flap.number_of_columns.get()
@@ -291,16 +298,29 @@ class SplitFlap(object):
         :param layout_index: Index in row column layout
         '''
 
+        ProgressBar.setup(
+            title='Creating Split Flaps',
+            text='...',
+            maximum=100,
+            parent=utils.get_maya_window()
+        )
+
         flaps = utils.create_flaps(
             num_images,
             base_flaps,
             layout_index,
             rows,
             columns)
+
+        ProgressBar.set(10, 'Creating cloth flaps...')
         cloth_flaps = [utils.create_cloth_flap(flaps[0])]
         cloth_flaps.extend([cloth_flaps[0].duplicate(rc=True)[0]
                             for i in xrange(num_images - 1)])
+
+        ProgressBar.set(20, 'Radially arranging flaps...')
         utils.radial_arrangement(flaps, radius)
+
+        ProgressBar.set(30, 'Radially arranging cloth flaps')
         utils.radial_arrangement(cloth_flaps, radius)
 
         r, c = utils.get_row_col(layout_index, None, columns)
@@ -308,12 +328,14 @@ class SplitFlap(object):
         cloth_name = 'cloth_flap_{}'.format(rowcol)
         flaps_name = 'flaps_{}'.format(rowcol)
 
+        ProgressBar.set(50, 'Combining cloth geo...')
         cloth = pm.polyUnite(
             cloth_flaps,
             ch=False,
             mergeUVSets=True,
             name=cloth_name + '_geo',
         )[0]
+        ProgressBar.set(60, 'Combining flap geo...')
         flaps = pm.polyUnite(
             flaps,
             ch=False,
@@ -323,8 +345,10 @@ class SplitFlap(object):
         pm.hide(cloth)
 
         # Create colliders
+        ProgressBar.set(70, 'Creating Collider...')
         collider = utils.create_collider(flaps, radius)
 
+        ProgressBar.set(80, 'Grouping geometry...')
         flaps_grp = pm.group([flaps, collider],
                              name='flaps_{}_geo_grp'.format(rowcol))
         rotate_grp = pm.group(cloth, name='rotate_{}_grp'.format(rowcol))
@@ -333,6 +357,7 @@ class SplitFlap(object):
             [copy_grp, rotate_grp, flaps_grp],
             name=flaps_name + '_grp'
         )
+        ProgressBar.set(90, 'Adding attributes...')
         split_flap.addAttr('split_flap', at='bool', dv=True)
         split_flap.addAttr('layout_index', at='long', dv=layout_index)
         split_flap.addAttr('layout_row', at='long', dv=r)
@@ -351,8 +376,11 @@ class SplitFlap(object):
         collider.message.connect(split_flap.collider)
 
         # Rename hierarchy
+        ProgressBar.set(95, 'Renaming hierarchy')
         utils.replace_in_hierarchy(split_flap, r'\d+', 'BASE')
 
+        ProgressBar.set(100, 'Done!')
+        ProgressBar.hide()
         return cls(split_flap)
 
     def make_dynamic(self):
@@ -368,10 +396,3 @@ class SplitFlap(object):
         pm.group(ncloth_transforms + ncol_transforms + [base],
                  name='dynamics_grp',
                  parent=self.pynode)
-
-    def rem_dynamic(self):
-        if not self.is_dynamic:
-            print('Not dynamic')
-            return
-
-        pass

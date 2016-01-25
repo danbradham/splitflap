@@ -267,12 +267,90 @@ class Dialog(QtGui.QDialog):
         return change_value
 
 
+class ProgressBar(object):
+
+    _instance = None
+    _suppress = True
+
+    @classmethod
+    def suppress(cls, value):
+        cls._suppress = value
+
+    @classmethod
+    def create(self, parent=None):
+        dialog = QtGui.QDialog(parent=parent)
+        layout = QtGui.QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
+        dialog.setLayout(layout)
+        dialog.setFixedSize(300, 100)
+
+        dialog.progress_bar = QtGui.QProgressBar()
+        dialog.progress_bar.setMinimum(0)
+        dialog.progress_bar.setMaximum(100)
+        dialog.label = QtGui.QLabel()
+
+        layout.addWidget(dialog.progress_bar)
+        layout.addWidget(dialog.label)
+
+        return dialog
+
+    @classmethod
+    def set_title(cls, title):
+        if cls._suppress:
+            return
+        cls._instance.setWindowTitle(title)
+
+    @classmethod
+    def set(cls, value, text=None):
+        if cls._suppress:
+            return
+        cls._instance.progress_bar.setValue(value)
+        if text:
+            cls._instance.label.setText(text)
+
+    @classmethod
+    def set_maximum(cls, value):
+        if cls._suppress:
+            return
+        cls._instance.progress_bar.setMaximum(value)
+
+    @classmethod
+    def show(cls):
+        if cls._suppress:
+            return
+        cls._instance.show()
+
+    @classmethod
+    def hide(cls, delay=1):
+        if cls._suppress:
+            return
+        QtCore.QTimer.singleShot(delay * 1000, cls._instance.hide)
+
+    @classmethod
+    def setup(cls, title, text, maximum, parent=None):
+        if cls._suppress:
+            return
+        if not cls._instance:
+            cls._instance = cls.create(parent=parent)
+
+        cls.set_title(title)
+        cls.set_maximum(maximum)
+        cls.set(0, text)
+        cls._instance.show()
+        return cls._instance
+
+
 if __name__ == '__main__':
     import signal
     import sys
+    import time
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     app = QtGui.QApplication(sys.argv)
-    d = Dialog()
-    d.show()
+    ProgressBar.suppress(False)
+    ProgressBar.setup('Amazing', 'doing things...', 1000)
+    for i in xrange(1000):
+        ProgressBar.set(i + 1, 'doing thing {}'.format(i))
+        time.sleep(0.005)
+    ProgressBar.hide()
     sys.exit(app.exec_())
