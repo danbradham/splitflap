@@ -15,7 +15,7 @@ def get_maya_window():
     '''Get Maya MainWindow as a QWidget.'''
 
     ptr = long(MQtUtil.mainWindow())
-    return shiboken.wrapInstance(ptr, QtGui.QMainWindow)
+    return shiboken.wrapInstance(ptr, QtGui.QWidget)
 
 
 def wait(delay=1):

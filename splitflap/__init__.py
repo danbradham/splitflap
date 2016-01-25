@@ -1,4 +1,4 @@
-from . import utils, models, controller, ui, uiutils
+from . import utils, models, controller, ui
 from .models import *
 
 # Load SOuP plugin

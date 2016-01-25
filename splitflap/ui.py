@@ -191,7 +191,7 @@ class Dialog(QtGui.QDialog):
             height=3,
             padding=0.2,
         )
-        self.grid.setMinimumSize(300, 300)
+        self.grid.setMinimumSize(300, 200)
 
         row_label = QtGui.QLabel('rows')
         row_label.setAlignment(QtCore.Qt.AlignRight)
@@ -219,15 +219,19 @@ class Dialog(QtGui.QDialog):
         self.columns.valueChanged.connect(self.grid_attr_changed('columns'))
 
         self.num_images = QtGui.QSpinBox()
-        self.num_images.setMinimum(12)
+        self.num_images.setValue(32)
+        self.num_images.setMinimum(8)
 
         self.radius = QtGui.QDoubleSpinBox()
+        self.radius.setValue(0.225)
         self.radius.setSingleStep(0.025)
+        self.radius.setDecimals(3)
 
         self.padding = QtGui.QDoubleSpinBox()
         self.padding.valueChanged.connect(self.grid_attr_changed('padding'))
         self.padding.setValue(0.2)
         self.padding.setSingleStep(0.025)
+        self.padding.setDecimals(3)
 
         control_layout = QtGui.QGridLayout()
         control_layout.setContentsMargins(20, 20, 20, 20)
@@ -261,6 +265,7 @@ class Dialog(QtGui.QDialog):
         def change_value():
             setattr(self.grid, attr, getattr(self, attr).value())
         return change_value
+
 
 if __name__ == '__main__':
     import signal

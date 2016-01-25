@@ -10,8 +10,8 @@ class SplitFlapDialog(Dialog):
     def __init__(self, parent=None):
         super(SplitFlapDialog, self).__init__(parent)
 
-        self.generate_base_flaps.connect(self.create_base_flaps)
-        self.generate_wall.connect(self.create_wall)
+        self.generate_base_flaps.clicked.connect(self.create_base_flaps)
+        self.generate_wall.clicked.connect(self.create_wall)
 
     def create_base_flaps(self):
 
@@ -24,10 +24,10 @@ class SplitFlapDialog(Dialog):
         with undo_chunk(auto_undo=True):
             SplitFlap.create(
                 base_flaps=selection,
-                num_images=32,
-                rows=3,
-                columns=10,
-                radius=0.225,
+                num_images=self.num_images.value(),
+                rows=self.rows.value(),
+                columns=self.columns.value(),
+                radius=self.radius.value(),
             )
 
     def create_wall(self):
@@ -39,13 +39,14 @@ class SplitFlapDialog(Dialog):
 
         with undo_chunk(auto_undo=True):
             SplitFlapWall.create(
-                pm.selected(),
-                padding=(0.2, -0.1)
+                SplitFlap(selection[0]),
+                padding=(self.padding.value(), -self.padding.value() * 0.5)
             ).make_dynamic()
 
 
 def show(cache=[]):
     if cache:
+        cache[0].show()
         return cache[0]
 
     dialog = SplitFlapDialog(parent=get_maya_window())
