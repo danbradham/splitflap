@@ -1,8 +1,6 @@
 from __future__ import division
-import math
 from collections import defaultdict
-from itertools import permutations
-from PySide import QtGui, QtCore
+from Qt import QtWidgets, QtGui, QtCore
 
 
 class RepaintProperty(object):
@@ -25,7 +23,7 @@ class RepaintProperty(object):
         inst.repaint()
 
 
-class GridWidget(QtGui.QWidget):
+class GridWidget(QtWidgets.QWidget):
     '''
     A Widget displaying an array of cards based on some parameters
     '''
@@ -73,8 +71,8 @@ class GridWidget(QtGui.QWidget):
 
         rects = []
         lines = []
-        for y in xrange(self.rows):
-            for x in xrange(self.columns):
+        for y in range(self.rows):
+            for x in range(self.columns):
                 dx = x * width + tx
                 dy = y * height + ty
                 rects.append(rect.translated(dx, dy))
@@ -93,7 +91,7 @@ class GridWidget(QtGui.QWidget):
             rx = ry * rscale
 
         font = QtGui.QFont('')
-        font.setStyleHint(QtGui.QFont.Fantasy)
+        font.setStyleHint(QtGui.QFont.Monospace)
         font.setStretch(90)
         font.setPixelSize(min(width, height) * 0.7)
 
@@ -115,8 +113,8 @@ class GridWidget(QtGui.QWidget):
                 height * 0.025,
                 QtCore.Qt.SolidLine)
             painter.setPen(pen)
-            for l in lines:
-                painter.drawLine(*l)
+            for line in lines:
+                painter.drawLine(*line)
 
             return
 
@@ -146,8 +144,8 @@ class GridWidget(QtGui.QWidget):
             height * 0.025,
             QtCore.Qt.SolidLine)
         a_painter.setPen(pen)
-        for l in lines:
-            a_painter.drawLine(*l)
+        for line in lines:
+            a_painter.drawLine(*line)
 
         a_painter.end()
 
@@ -160,7 +158,6 @@ class GridWidget(QtGui.QWidget):
         scaled.setAlphaChannel(alpha)
         painter.drawPixmap(tx, ty, scaled)
         return
-
 
     def paintEvent(self, event):
 
@@ -179,7 +176,7 @@ class GridWidget(QtGui.QWidget):
         painter.end()
 
 
-class Dialog(QtGui.QDialog):
+class Dialog(QtWidgets.QDialog):
 
     def __init__(self, parent=None):
         super(Dialog, self).__init__(parent)
@@ -193,47 +190,47 @@ class Dialog(QtGui.QDialog):
         )
         self.grid.setMinimumSize(300, 200)
 
-        row_label = QtGui.QLabel('rows')
+        row_label = QtWidgets.QLabel('rows')
         row_label.setAlignment(QtCore.Qt.AlignRight)
 
-        column_label = QtGui.QLabel('columns')
+        column_label = QtWidgets.QLabel('columns')
         column_label.setAlignment(QtCore.Qt.AlignRight)
 
-        num_images_label = QtGui.QLabel('num_images')
+        num_images_label = QtWidgets.QLabel('num_images')
         num_images_label.setAlignment(QtCore.Qt.AlignRight)
 
-        radius_label = QtGui.QLabel('radius')
+        radius_label = QtWidgets.QLabel('radius')
         radius_label.setAlignment(QtCore.Qt.AlignRight)
 
-        padding_label = QtGui.QLabel('padding')
+        padding_label = QtWidgets.QLabel('padding')
         padding_label.setAlignment(QtCore.Qt.AlignRight)
 
-        self.rows = QtGui.QSpinBox()
+        self.rows = QtWidgets.QSpinBox()
         self.rows.setMinimum(1)
         self.rows.setValue(3)
         self.rows.valueChanged.connect(self.grid_attr_changed('rows'))
 
-        self.columns = QtGui.QSpinBox()
+        self.columns = QtWidgets.QSpinBox()
         self.columns.setMinimum(1)
         self.columns.setValue(4)
         self.columns.valueChanged.connect(self.grid_attr_changed('columns'))
 
-        self.num_images = QtGui.QSpinBox()
+        self.num_images = QtWidgets.QSpinBox()
         self.num_images.setValue(32)
         self.num_images.setMinimum(8)
 
-        self.radius = QtGui.QDoubleSpinBox()
+        self.radius = QtWidgets.QDoubleSpinBox()
         self.radius.setValue(0.225)
         self.radius.setSingleStep(0.025)
         self.radius.setDecimals(3)
 
-        self.padding = QtGui.QDoubleSpinBox()
+        self.padding = QtWidgets.QDoubleSpinBox()
         self.padding.valueChanged.connect(self.grid_attr_changed('padding'))
         self.padding.setValue(0.2)
         self.padding.setSingleStep(0.025)
         self.padding.setDecimals(3)
 
-        control_layout = QtGui.QGridLayout()
+        control_layout = QtWidgets.QGridLayout()
         control_layout.setContentsMargins(20, 20, 20, 20)
         control_layout.addWidget(row_label, 0, 0)
         control_layout.addWidget(self.rows, 0, 1)
@@ -246,16 +243,17 @@ class Dialog(QtGui.QDialog):
         control_layout.addWidget(padding_label, 4, 0)
         control_layout.addWidget(self.padding, 4, 1)
 
-        self.generate_base_flaps = QtGui.QPushButton('Generate Base Flaps')
-        self.generate_wall = QtGui.QPushButton('Generate Wall')
+        self.generate_base_flaps = QtWidgets.QPushButton('Generate Base Flaps')
+        self.generate_wall = QtWidgets.QPushButton('Generate Wall')
 
-        button_layout = QtGui.QGridLayout()
+        button_layout = QtWidgets.QGridLayout()
         button_layout.setContentsMargins(20, 20, 20, 20)
         button_layout.addWidget(self.generate_base_flaps, 0, 0)
         button_layout.addWidget(self.generate_wall, 0, 1)
 
-        layout = QtGui.QVBoxLayout()
+        layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
+        self.setWindowTitle('Split Flap Display Builder')
         layout.addWidget(self.grid)
         layout.addLayout(control_layout)
         layout.addLayout(button_layout)
@@ -278,16 +276,16 @@ class ProgressBar(object):
 
     @classmethod
     def create(self, parent=None):
-        dialog = QtGui.QDialog(parent=parent)
-        layout = QtGui.QVBoxLayout()
+        dialog = QtWidgets.QDialog(parent=parent)
+        layout = QtWidgets.QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
         dialog.setLayout(layout)
         dialog.setFixedSize(300, 100)
 
-        dialog.progress_bar = QtGui.QProgressBar()
+        dialog.progress_bar = QtWidgets.QProgressBar()
         dialog.progress_bar.setMinimum(0)
         dialog.progress_bar.setMaximum(100)
-        dialog.label = QtGui.QLabel()
+        dialog.label = QtWidgets.QLabel()
 
         layout.addWidget(dialog.progress_bar)
         layout.addWidget(dialog.label)
@@ -346,11 +344,20 @@ if __name__ == '__main__':
     import time
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-    app = QtGui.QApplication(sys.argv)
-    ProgressBar.suppress(False)
-    ProgressBar.setup('Amazing', 'doing things...', 1000)
-    for i in xrange(1000):
-        ProgressBar.set(i + 1, 'doing thing {}'.format(i))
-        time.sleep(0.005)
-    ProgressBar.hide()
+    app = QtWidgets.QApplication(sys.argv)
+
+    def test_progressbar():
+        ProgressBar.suppress(False)
+        ProgressBar.setup('Amazing', 'doing things...', 1000)
+        for i in range(1000):
+            ProgressBar.set(i + 1, 'doing thing {}'.format(i))
+            time.sleep(0.05)
+            app.processEvents()
+        ProgressBar.show()
+
+    def test_dialog():
+        dialog = Dialog()
+        dialog.show()
+
+    test_dialog()
     sys.exit(app.exec_())

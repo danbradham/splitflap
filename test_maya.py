@@ -1,6 +1,6 @@
 import sys
 
-sys.path.insert(1, 'Y:/BNS_Pipeline/development/projects/splitflap')
+sys.path.insert(1, '/path/to/splitflap')
 
 import splitflap
 reload(splitflap)
